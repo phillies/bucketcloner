@@ -33,7 +33,7 @@ def add_credentials(url: str, user: str, password: str) -> Union[str, None]:
     return url
 
 
-def clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_existing: bool = True) -> None:
+def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_existing: bool = True) -> None:
     """Cloning all repositories
 
     Args:
@@ -97,7 +97,7 @@ def clone_bitbucket(user: str, password: str, workspaces: Union[str, None], skip
     for workspace in workspaces:
         if not os.path.exists(workspace):
             os.mkdir(workspace)
-        clone_bitbucket_workspace(user, password, workspace, skip_existing)
+        _clone_bitbucket_workspace(user, password, workspace, skip_existing)
 
 
 def list_bitbucket_workspaces(user: str, password: str) -> list:

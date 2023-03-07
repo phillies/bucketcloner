@@ -2,9 +2,9 @@
 Simple tool to list all your bitbucket workspaces and clone all repositories associated with these workspaces.
 
 ## Requirements
-1. You need to know your bitbucket username. Can be found at [https://bitbucket.org/account/settings/].
-2. You need to create an app password here [https://bitbucket.org/account/settings/app-passwords/] with read permissions for *account*, *workspace membership* and *repositories*.
-3. Install bucketcloner either by cloning this repository and running `pip install .` or by installing it via `pip install bucketcloner`
+1. You need to know your bitbucket username. Can be found at https://bitbucket.org/account/settings/.
+2. You need to create an app password here https://bitbucket.org/account/settings/app-passwords/ with read permissions for *account*, *workspace membership* and *repositories*.
+3. Install bucketcloner either by cloning this repository and running `pip install .` or by installing it via `pip install bucketcloner`. Minimum required python version is 3.8.
 
 ## List all workspaces
 ```bash
@@ -28,3 +28,6 @@ All existing repositories in the folders will be deleted and cloned again. To ju
 ```bash
 bucketcloner -u <username> -p <password> -w workspace1,workspace2 --skip-existing clone
 ```
+
+## Python example
+The `example.ipynb` includes an example how to read the workspaces and download the repositories from within python.
