@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import sys
-from typing import Union, List
+from typing import Union, List, Optional
 
 import git
 import requests
@@ -33,14 +33,17 @@ def add_credentials(url: str, user: str, password: str) -> Union[str, None]:
     return url
 
 
-def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_existing: bool = True) -> None:
+def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_existing: bool = True, project: Optional[str] = None) -> None:
     """Cloning all repositories
 
     Args:
         user (str): username
         password (str): password
     """
+
     url = f'https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen=10'
+    if project:
+        url = url + f"&q=project.key%3D%22{project}%22"
 
     while (resp := requests.get(url, auth=(user, password))).status_code == 200:
         jresp = resp.json()
@@ -80,7 +83,7 @@ def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_ex
         print(f'The url {url} returned status code {resp.status_code}.')
 
 
-def clone_bitbucket(user: str, password: str, workspaces: Union[str, None], skip_existing: bool = True) -> None:
+def clone_bitbucket(user: str, password: str, workspaces: Union[str, None], skip_existing: bool = True, project: Optional[str] = None) -> None:
     """Cloning all repositories
 
     Args:
@@ -97,7 +100,7 @@ def clone_bitbucket(user: str, password: str, workspaces: Union[str, None], skip
     for workspace in workspaces:
         if not os.path.exists(workspace):
             os.mkdir(workspace)
-        _clone_bitbucket_workspace(user, password, workspace, skip_existing)
+        _clone_bitbucket_workspace(user, password, workspace, skip_existing, project)
 
 
 def list_bitbucket_workspaces(user: str, password: str) -> list:
@@ -141,12 +144,13 @@ def main(args: List[str]):
     parser.add_argument('-p', '--password', help='App password', required=True)
     parser.add_argument('-w', '--workspace', help='Workspace name(s), separated by comma')
     parser.add_argument('-s', '--skip-existing', help='Skip existing repositories', action='store_true')
+    parser.add_argument('--project', help='Limit the clone to a specifc bitbucket project')
     parser.add_argument('command', help='Command', choices=['clone', 'workspace'])
 
     namespace = parser.parse_args(args)
 
     if namespace.command == 'clone':
-        clone_bitbucket(namespace.user, namespace.password, namespace.workspace, namespace.skip_existing)
+        clone_bitbucket(namespace.user, namespace.password, namespace.workspace, namespace.skip_existing, namespace.project)
 
     elif namespace.command == 'workspace':
         workspaces = list_bitbucket_workspaces(namespace.user, namespace.password)
