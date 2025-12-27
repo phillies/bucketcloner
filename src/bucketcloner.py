@@ -3,21 +3,23 @@ import os
 import shutil
 import sys
 from typing import Union, List, Optional
+from urllib.parse import quote
 
 import git
 import requests
 
 
-def add_credentials(url: str, user: str, password: str) -> Union[str, None]:
-    """Adding username and password to the URL.
-    URL may contain the username in the form of http(s)://user@example.com
-    or just the url http(s)://example.com and will return
-    https://user:password@example.com
+def add_credentials(url: str, email: str, token: str) -> Union[str, None]:
+    """Adding credentials to the URL for git operations.
+
+    For Bitbucket API tokens (starting with ATAT), uses the static username
+    'x-bitbucket-api-token-auth' as recommended by Bitbucket.
+    URL may contain existing credentials which will be replaced.
 
     Args:
         url (str): source url
-        user (str): username
-        password (str): password
+        email (str): account email (not used for API tokens)
+        token (str): API token
 
     Returns:
         str: url with credentials, None if invalid url
@@ -29,23 +31,33 @@ def add_credentials(url: str, user: str, password: str) -> Union[str, None]:
     else:
         print(f'Invalid URL: {url}')
         return None
-    url = 'https://' + user + ':' + password + '@' + repo
+
+    # For Bitbucket API tokens, use the static username as per Bitbucket documentation
+    if token.startswith('ATAT'):
+        username = 'x-bitbucket-api-token-auth'
+    else:
+        # Fallback for app passwords (legacy)
+        username = quote(email, safe='')
+
+    # URL-encode the token to handle special characters
+    encoded_token = quote(token, safe='')
+    url = 'https://' + username + ':' + encoded_token + '@' + repo
     return url
 
 
-def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_existing: bool = True, project: Optional[str] = None) -> None:
+def _clone_bitbucket_workspace(email: str, token: str, workspace: str, skip_existing: bool = True, project: Optional[str] = None) -> None:
     """Cloning all repositories
 
     Args:
-        user (str): username
-        password (str): password
+        email (str): account email
+        token (str): API token
     """
 
     url = f'https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen=10'
     if project:
         url = url + f"&q=project.key%3D%22{project}%22"
 
-    while (resp := requests.get(url, auth=(user, password))).status_code == 200:
+    while (resp := requests.get(url, auth=(email, token))).status_code == 200:
         jresp = resp.json()
 
         for repo in jresp['values']:
@@ -70,7 +82,7 @@ def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_ex
                     else:
                         print(f'Deleting {workspace}/{repo["name"]} because it already exists.')
                         shutil.rmtree(f'{workspace}/{repo["name"]}')
-                repo_url = add_credentials(repo_url, user, password)
+                repo_url = add_credentials(repo_url, email, token)
                 git.Repo.clone_from(repo_url, f'{workspace}/{repo["name"]}')
 
             else:
@@ -83,32 +95,32 @@ def _clone_bitbucket_workspace(user: str, password: str, workspace: str, skip_ex
         print(f'The url {url} returned status code {resp.status_code}.')
 
 
-def clone_bitbucket(user: str, password: str, workspaces: Union[str, None], skip_existing: bool = True, project: Optional[str] = None) -> None:
+def clone_bitbucket(email: str, token: str, workspaces: Union[str, None], skip_existing: bool = True, project: Optional[str] = None) -> None:
     """Cloning all repositories
 
     Args:
-        user (str): username
-        password (str): password
+        email (str): account email
+        token (str): API token
         workspaces (str | None): workspace name
         skip_existing (bool): skip existing repositories
     """
     if workspaces is None:
-        workspaces = [w['slug'] for w in list_bitbucket_workspaces(user, password)]
+        workspaces = [w['slug'] for w in list_bitbucket_workspaces(email, token)]
     else:
         workspaces = workspaces.split(',')
 
     for workspace in workspaces:
         if not os.path.exists(workspace):
             os.mkdir(workspace)
-        _clone_bitbucket_workspace(user, password, workspace, skip_existing, project)
+        _clone_bitbucket_workspace(email, token, workspace, skip_existing, project)
 
 
-def list_bitbucket_workspaces(user: str, password: str) -> list:
+def list_bitbucket_workspaces(email: str, token: str) -> list:
     """List all workspaces
 
     Args:
-        user (str): username
-        password (str): password
+        email (str): account email
+        token (str): API token
 
     Returns:
         list: List of workspaces (dict with name, slug, and url as entries)
@@ -117,7 +129,7 @@ def list_bitbucket_workspaces(user: str, password: str) -> list:
 
     workspaces = []
 
-    while (resp := requests.get(url, auth=(user, password))).status_code == 200:
+    while (resp := requests.get(url, auth=(email, token))).status_code == 200:
         jresp = resp.json()
 
         for workspace in jresp['values']:
@@ -140,8 +152,8 @@ def list_bitbucket_workspaces(user: str, password: str) -> list:
 
 def main(args: List[str]):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-u', '--user', help='Username', required=True)
-    parser.add_argument('-p', '--password', help='App password', required=True)
+    parser.add_argument('-e', '--email', help='Account email', required=True)
+    parser.add_argument('-t', '--token', help='API token', required=True)
     parser.add_argument('-w', '--workspace', help='Workspace name(s), separated by comma')
     parser.add_argument('-s', '--skip-existing', help='Skip existing repositories', action='store_true')
     parser.add_argument('--project', help='Limit the clone to a specifc bitbucket project')
@@ -150,10 +162,10 @@ def main(args: List[str]):
     namespace = parser.parse_args(args)
 
     if namespace.command == 'clone':
-        clone_bitbucket(namespace.user, namespace.password, namespace.workspace, namespace.skip_existing, namespace.project)
+        clone_bitbucket(namespace.email, namespace.token, namespace.workspace, namespace.skip_existing, namespace.project)
 
     elif namespace.command == 'workspace':
-        workspaces = list_bitbucket_workspaces(namespace.user, namespace.password)
+        workspaces = list_bitbucket_workspaces(namespace.email, namespace.token)
         for w in workspaces:
             print(f'{w["name"]} ({w["slug"]}) - {w["url"]}')
 
