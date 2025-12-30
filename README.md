@@ -1,10 +1,13 @@
 # Bucketcloner
-Simple tool to list all your bitbucket workspaces and clone all repositories associated with these workspaces.
+Simple tool to list all your bitbucket workspaces and clone (all) repositories associated with these workspaces.
 
 ## Requirements
-1. You need to know your Bitbucket account email. Can be found at https://bitbucket.org/account/settings/.
-2. You need to create an API token here https://bitbucket.org/account/settings/api-tokens/ with read permissions for *account*, *workspace membership* and *repositories*.
-3. Install bucketcloner either by cloning this repository and running `pip install .` or by installing it via `pip install bucketcloner`. Minimum required python version is 3.8.
+1. You need to know your Bitbucket account email. Can be found at https://bitbucket.org/account/settings/email/.
+2. You need to create an API token here https://id.atlassian.com/manage-profile/security/api-tokens with read permissions for *account*, *workspace membership* and *repositories*.
+
+Install bucketcloner either by cloning this repository and running `pip install .` or by installing it via `pip install bucketcloner`. Minimum required python version is 3.9.
+
+Alternatively, you can run bucketcloner using `uvx`: `uvx bucketcloner --help`
 
 ## List all workspaces
 ```bash

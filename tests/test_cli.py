@@ -1,13 +1,15 @@
-import unittest
 import argparse
 
-from src.bucketcloner import main
+import pytest
+
+from bucketcloner.main import main
 
 
-class TestCLI(unittest.TestCase):
-    def test_invalid_CLI_parameter(self):
-        with self.assertRaises((argparse.ArgumentError, SystemExit), msg="Too few command line arguments"):
-            main([])
+def test_invalid_CLI_parameter_too_few():
+    with pytest.raises((argparse.ArgumentError, SystemExit)):
+        main([])
 
-        with self.assertRaises((argparse.ArgumentError, SystemExit), msg="Unknown command"):
-            main(["false command"])
+
+def test_invalid_CLI_parameter_unknown_command():
+    with pytest.raises((argparse.ArgumentError, SystemExit)):
+        main(["false command"])

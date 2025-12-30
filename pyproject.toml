@@ -1,15 +1,10 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "bucketcloner"
-version = "0.2.0"
+version = "0.3.0"
 authors = [{ name = "Philipp Lies", email = "phil@lies.io" }]
-description = ""
+description = "Clone all repositories from a Bitbucket workspace."
 readme = "README.md"
 requires-python = ">=3.8"
-dynamic = ["dependencies"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Development Status :: 4 - Beta",
@@ -17,12 +12,24 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+dependencies = ["gitpython>=3.1.45", "requests>=2.32.4"]
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=3.5.0",
+    "pytest>=8.3.5",
+    "ruff>=0.14.10",
+    "types-requests>=2.32.0.20241016",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/phillies/bucketcloner"
 "Bug Tracker" = "https://github.com/phillies/bucketcloner/issues"
 
-[project.scripts]
-bucketcloner = "bucketcloner:entry_point"
 
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
+[project.scripts]
+bucketcloner = "bucketcloner.main:entry_point"
