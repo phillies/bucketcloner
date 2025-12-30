@@ -39,12 +39,44 @@ def add_credentials(url: str, token: str) -> Union[str, None]:
     return "https://" + username + ":" + encoded_token + "@" + repo
 
 
+def _process_repo(
+    repo_name: str, repo_url: str, workspace: str, skip_existing: bool, refresh: bool
+) -> None:
+    """Process a single repository cloning or pulling changes.
+
+    Args:
+        repo (str): repository name
+        config (BucketClonerConfig): configuration dataclass
+    """
+    if Path(f"{workspace}/{repo_name}").exists():
+        if skip_existing:
+            print(f"Skipping {workspace}/{repo_name} because it already exists.")
+            return
+
+        if refresh:
+            print(f"Pulling changes for {workspace}/{repo_name}.")
+            local_repo = git.Repo(f"{workspace}/{repo_name}")
+            origin = local_repo.remotes.origin
+            origin.pull()
+            return
+
+        print(f"Deleting {workspace}/{repo_name} because it already exists.")
+        try:
+            shutil.rmtree(f"{workspace}/{repo_name}")
+        except PermissionError as e:
+            print(f"Error deleting {workspace}/{repo_name}: {e}\nSkipping.")
+            return
+
+    git.Repo.clone_from(repo_url, f"{workspace}/{repo_name}")
+
+
 def _clone_bitbucket_workspace(
     email: str,
     token: str,
     workspace: str,
-    skip_existing: bool = True,
-    project: Optional[str] = None,
+    skip_existing: bool,
+    project: Optional[str],
+    refresh: bool,
 ) -> None:
     """Cloning all repositories
 
@@ -77,21 +109,8 @@ def _clone_bitbucket_workspace(
                     )
                     continue
 
-                print(f"Cloning {repo['name']} from {repo_url} into {workspace}.")
-                if Path(f"{workspace}/{repo['name']}").exists():
-                    if skip_existing:
-                        print(
-                            f"Skipping {workspace}/{repo['name']} because it already exists."
-                        )
-                        continue
-
-                    print(
-                        f"Deleting {workspace}/{repo['name']} because it already exists."
-                    )
-                    shutil.rmtree(f"{workspace}/{repo['name']}")
-
                 repo_url = add_credentials(repo_url, token)
-                git.Repo.clone_from(repo_url, f"{workspace}/{repo['name']}")
+                _process_repo(repo["name"], repo_url, workspace, skip_existing, refresh)
 
             else:
                 print(
@@ -108,9 +127,10 @@ def _clone_bitbucket_workspace(
 def clone_bitbucket(
     email: str,
     token: str,
-    workspaces: Union[str, None],
-    skip_existing: bool = True,
-    project: Optional[str] = None,
+    workspaces: Optional[str],
+    skip_existing: bool,
+    project: Optional[str],
+    refresh: bool,
 ) -> None:
     """Cloning all repositories
 
@@ -128,7 +148,9 @@ def clone_bitbucket(
     for workspace in workspaces:
         if not Path(workspace).exists():
             Path(workspace).mkdir()
-        _clone_bitbucket_workspace(email, token, workspace, skip_existing, project)
+        _clone_bitbucket_workspace(
+            email, token, workspace, skip_existing, project, refresh
+        )
 
 
 def list_bitbucket_workspaces(email: str, token: str) -> list:
@@ -182,6 +204,12 @@ def main(args: List[str]) -> None:
         "--project", help="Limit the clone to a specifc bitbucket project"
     )
     parser.add_argument("command", help="Command", choices=["clone", "workspace"])
+    parser.add_argument(
+        "-r",
+        "--refresh",
+        help="Pulls changes if the repository exists",
+        action="store_true",
+    )
 
     namespace = parser.parse_args(args)
 
@@ -192,6 +220,7 @@ def main(args: List[str]) -> None:
             namespace.workspace,
             namespace.skip_existing,
             namespace.project,
+            namespace.refresh,
         )
 
     elif namespace.command == "workspace":

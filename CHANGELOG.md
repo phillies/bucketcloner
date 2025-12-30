@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switched tests to pytest
 
 ## Added
+- Pull existing repositories instead of deleting and cloning with `--refresh`/`-r` flag
 - Pre-commit hooks
 - Changelog
 
