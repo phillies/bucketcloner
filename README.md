@@ -32,5 +32,15 @@ All existing repositories in the folders will be deleted and cloned again. To ju
 bucketcloner -e <email> -t <api_token> -w workspace1,workspace2 --skip-existing clone
 ```
 
+Clone all repos from all workspaces with project PRO1 into /tmp with folder structure workspace/project/repo.
+```bash
+bucketcloner -e <email> -t <api_token> --project PRO1 --base-folder /tmp --project-folder clone
+```
+
+List all projects in all workspaces
+```bash
+bucketcloner -e <email> -t <api_token> project
+```
+
 ## Python example
 The `example.ipynb` includes an example how to read the workspaces and download the repositories from within python.

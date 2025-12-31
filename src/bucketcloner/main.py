@@ -1,12 +1,23 @@
 import argparse
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 from urllib.parse import quote
 
 import git
 import requests
+
+
+@dataclass
+class BucketClonerConfig:
+    email: str
+    token: str
+    skip_existing: bool
+    refresh: bool
+    clone_into_project_folders: bool
+    base_folder: Path
 
 
 def add_credentials(url: str, token: str) -> Union[str, None]:
@@ -39,50 +50,87 @@ def add_credentials(url: str, token: str) -> Union[str, None]:
     return "https://" + username + ":" + encoded_token + "@" + repo
 
 
-def _process_repo(
-    repo_name: str, repo_url: str, workspace: str, skip_existing: bool, refresh: bool
-) -> None:
-    """Process a single repository cloning or pulling changes.
-
-    Args:
-        repo (str): repository name
-        config (BucketClonerConfig): configuration dataclass
-    """
-    if Path(f"{workspace}/{repo_name}").exists():
-        if skip_existing:
-            print(f"Skipping {workspace}/{repo_name} because it already exists.")
-            return
-
-        if refresh:
-            print(f"Pulling changes for {workspace}/{repo_name}.")
-            local_repo = git.Repo(f"{workspace}/{repo_name}")
-            origin = local_repo.remotes.origin
-            origin.pull()
-            return
-
-        print(f"Deleting {workspace}/{repo_name} because it already exists.")
-        try:
-            shutil.rmtree(f"{workspace}/{repo_name}")
-        except PermissionError as e:
-            print(f"Error deleting {workspace}/{repo_name}: {e}\nSkipping.")
-            return
-
-    git.Repo.clone_from(repo_url, f"{workspace}/{repo_name}")
-
-
-def _clone_bitbucket_workspace(
+def _get_workspaces(
     email: str,
     token: str,
-    workspace: str,
-    skip_existing: bool,
-    project: Optional[str],
-    refresh: bool,
-) -> None:
-    """Cloning all repositories
+    workspaces: Optional[str],
+) -> List[str]:
+    """Retrieve all workspace slugs for the given account if none are specified,
+    otherwise return a list of the specified workspaces.
 
     Args:
         email (str): account email
         token (str): API token
+        workspaces (str | None): comma-separated workspace slugs or None
+
+    Returns:
+        List[str]: List of workspace slugs
+    """
+    if workspaces is None:
+        workspace_list = [w["slug"] for w in list_bitbucket_workspaces(email, token)]
+    else:
+        workspace_list = workspaces.split(",")
+    return workspace_list
+
+
+def _process_repo(
+    repo_name: str,
+    repo_url: str,
+    skip_existing: bool,
+    refresh: bool,
+    target_folder: Path,
+) -> None:
+    """Process a single repository cloning or pulling changes.
+
+    Args:
+        repo_name (str): repository name
+        repo_url (str): repository URL
+        skip_existing (bool): whether to skip existing repositories
+        refresh (bool): whether to pull changes for existing repositories
+        target_folder (Path): target folder to clone into
+    """
+
+    if target_folder.exists():
+        if skip_existing:
+            print(f"Skipping {repo_name} because it already exists.")
+            return
+
+        if refresh:
+            print(f"Pulling changes for {repo_name}.")
+            local_repo = git.Repo(target_folder)
+            origin = local_repo.remotes.origin
+            try:
+                origin.pull()
+            except git.GitCommandError as e:
+                print(f"Error pulling changes for {repo_name}: {e}\nSkipping.")
+            return
+
+        print(f"Deleting {repo_name} because it already exists.")
+        try:
+            shutil.rmtree(target_folder)
+        except PermissionError as e:
+            print(f"Error deleting {repo_name}: {e}\nSkipping.")
+            return
+
+    target_folder.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Cloning {repo_name} into {target_folder}.")
+    try:
+        git.Repo.clone_from(repo_url, target_folder)
+    except git.GitCommandError as e:
+        print(f"Error cloning {repo_name}: {e}\nSkipping.")
+
+
+def _clone_bitbucket_workspace(
+    workspace: str,
+    project: Optional[str],
+    config: BucketClonerConfig,
+) -> None:
+    """Cloning all repositories
+
+    Args:
+        workspace (str): workspace slug
+        project (str | None): project key to limit the clone to
+        config (BucketClonerConfig): configuration dataclass
     """
 
     url = f"https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen=10"
@@ -90,7 +138,7 @@ def _clone_bitbucket_workspace(
         url = url + f"&q=project.key%3D%22{project}%22"
 
     while (
-        resp := requests.get(url, auth=(email, token), timeout=10)
+        resp := requests.get(url, auth=(config.email, config.token), timeout=10)
     ).status_code == requests.codes.OK:
         jresp = resp.json()
 
@@ -109,51 +157,89 @@ def _clone_bitbucket_workspace(
                     )
                     continue
 
-                repo_url = add_credentials(repo_url, token)
-                _process_repo(repo["name"], repo_url, workspace, skip_existing, refresh)
+                repo_url = add_credentials(repo_url, config.token)
+                if repo_url is None:
+                    print(f"Skipping {repo['name']} because of invalid URL.")
+                    continue
+
+                repo_name = workspace + "/" + repo["name"]
+
+                target_folder = config.base_folder / workspace
+                if config.clone_into_project_folders and repo["project"]:
+                    target_folder = target_folder / repo["project"]["key"]
+                target_folder = target_folder / repo["name"]
+
+                _process_repo(
+                    repo_name,
+                    repo_url,
+                    config.skip_existing,
+                    config.refresh,
+                    target_folder,
+                )
 
             else:
                 print(
                     f"Skipping {repo['name']} because it is not a git but a {repo['scm']} repository."
                 )
 
-        if "next" not in resp.json():
+        if "next" not in jresp:
             break
-        url = resp.json()["next"]
+        url = jresp["next"]
     else:
         print(f"The url {url} returned status code {resp.status_code}.")
 
 
 def clone_bitbucket(
-    email: str,
-    token: str,
     workspaces: Optional[str],
-    skip_existing: bool,
     project: Optional[str],
-    refresh: bool,
+    config: BucketClonerConfig,
 ) -> None:
     """Cloning all repositories
 
     Args:
         email (str): account email
         token (str): API token
-        workspaces (str | None): workspace name
-        skip_existing (bool): skip existing repositories
+        config (BucketClonerConfig): configuration dataclass
     """
-    if workspaces is None:
-        workspaces = [w["slug"] for w in list_bitbucket_workspaces(email, token)]
+    workspace_list = _get_workspaces(config.email, config.token, workspaces)
+
+    for workspace in workspace_list:
+        _clone_bitbucket_workspace(workspace, project, config)
+
+
+def get_projects_in_workspace(email: str, token: str, workspace: str) -> List[dict]:
+    """Retrieve all projects in a given workspace.
+
+    Args:
+        email (str): account email
+        token (str): API token
+        workspace (str): workspace slug
+
+    Returns:
+        List[dict]: List of projects (dict with name, key, and url as entries)
+    """
+    url = f"https://api.bitbucket.org/2.0/workspaces/{workspace}/projects"
+    projects = []
+    while (
+        resp := requests.get(url, auth=(email, token), timeout=10)
+    ).status_code == requests.codes.OK:
+        jresp = resp.json()
+        for project in jresp["values"]:
+            p = {
+                "name": project["name"],
+                "key": project["key"],
+                "url": project["links"]["html"]["href"],
+            }
+            projects.append(p)
+        if "next" not in resp.json():
+            break
+        url = resp.json()["next"]
     else:
-        workspaces = workspaces.split(",")
-
-    for workspace in workspaces:
-        if not Path(workspace).exists():
-            Path(workspace).mkdir()
-        _clone_bitbucket_workspace(
-            email, token, workspace, skip_existing, project, refresh
-        )
+        print(f"The url {url} returned status code {resp.status_code}.")
+    return projects
 
 
-def list_bitbucket_workspaces(email: str, token: str) -> list:
+def list_bitbucket_workspaces(email: str, token: str) -> List[Dict[str, str]]:
     """List all workspaces
 
     Args:
@@ -203,30 +289,64 @@ def main(args: List[str]) -> None:
     parser.add_argument(
         "--project", help="Limit the clone to a specifc bitbucket project"
     )
-    parser.add_argument("command", help="Command", choices=["clone", "workspace"])
+    parser.add_argument(
+        "command", help="Command", choices=["clone", "workspace", "project"]
+    )
     parser.add_argument(
         "-r",
         "--refresh",
         help="Pulls changes if the repository exists",
         action="store_true",
     )
+    parser.add_argument(
+        "--project-folder",
+        help="Clone repositories into project subfolders inside the workspace folder",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--base-folder",
+        help="Base folder to clone repositories into (default: current working directory)",
+        type=Path,
+        default=Path.cwd(),
+    )
 
     namespace = parser.parse_args(args)
 
     if namespace.command == "clone":
+        config = BucketClonerConfig(
+            email=namespace.email,
+            token=namespace.token,
+            skip_existing=namespace.skip_existing,
+            refresh=namespace.refresh,
+            clone_into_project_folders=namespace.project_folder,
+            base_folder=namespace.base_folder,
+        )
         clone_bitbucket(
-            namespace.email,
-            namespace.token,
             namespace.workspace,
-            namespace.skip_existing,
             namespace.project,
-            namespace.refresh,
+            config,
         )
 
     elif namespace.command == "workspace":
         workspaces = list_bitbucket_workspaces(namespace.email, namespace.token)
         for w in workspaces:
             print(f"{w['name']} ({w['slug']}) - {w['url']}")
+
+    elif namespace.command == "project":
+        workspaces = _get_workspaces(
+            namespace.email, namespace.token, namespace.workspace
+        )
+
+        for workspace in workspaces:
+            projects = get_projects_in_workspace(
+                namespace.email, namespace.token, workspace
+            )
+            print(f"Projects in workspace {workspace}:")
+            for project in projects:
+                print(f"  {project['name']} ({project['key']}) - {project['url']}")
+            if not projects:
+                print("  No projects found.")
+            print()
 
 
 def entry_point() -> None:

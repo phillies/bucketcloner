@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Added
 - Pull existing repositories instead of deleting and cloning with `--refresh`/`-r` flag
+- Define the base folder for the clone with `--base-folder`
+- Create project folders under the workspace folder with `--project-folder` flag
 - Pre-commit hooks
 - Changelog
 
