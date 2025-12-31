@@ -62,6 +62,7 @@ def _get_workspaces(
         email (str): account email
         token (str): API token
         workspaces (str | None): comma-separated workspace slugs or None
+
     Returns:
         List[str]: List of workspace slugs
     """
@@ -82,8 +83,11 @@ def _process_repo(
     """Process a single repository cloning or pulling changes.
 
     Args:
-        repo (str): repository name
-        config (BucketClonerConfig): configuration dataclass
+        repo_name (str): repository name
+        repo_url (str): repository URL
+        skip_existing (bool): whether to skip existing repositories
+        refresh (bool): whether to pull changes for existing repositories
+        target_folder (Path): target folder to clone into
     """
 
     if target_folder.exists():
@@ -118,8 +122,9 @@ def _clone_bitbucket_workspace(
     """Cloning all repositories
 
     Args:
-        email (str): account email
-        token (str): API token
+        workspace (str): workspace slug
+        project (str | None): project key to limit the clone to
+        config (BucketClonerConfig): configuration dataclass
     """
 
     url = f"https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen=10"
@@ -188,8 +193,7 @@ def clone_bitbucket(
     Args:
         email (str): account email
         token (str): API token
-        workspaces (str | None): workspace name
-        skip_existing (bool): skip existing repositories
+        config (BucketClonerConfig): configuration dataclass
     """
     workspace_list = _get_workspaces(config.email, config.token, workspaces)
 
@@ -202,10 +206,12 @@ def clone_bitbucket(
 
 def get_projects_in_workspace(email: str, token: str, workspace: str) -> List[dict]:
     """Retrieve all projects in a given workspace.
+
     Args:
         email (str): account email
         token (str): API token
         workspace (str): workspace slug
+
     Returns:
         List[dict]: List of projects (dict with name, key, and url as entries)
     """
