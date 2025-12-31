@@ -2,12 +2,21 @@ import argparse
 import shutil
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import git
 import requests
+
+REQUEST_TIMEOUT = 10
+REQUEST_PAGELEN = 10
+
+
+class AuthMode(Enum):
+    HTTPS = "https"
+    SSH = "ssh"
 
 
 @dataclass
@@ -18,9 +27,11 @@ class BucketClonerConfig:
     refresh: bool
     clone_into_project_folders: bool
     base_folder: Path
+    auth_mode: AuthMode
+    ssh_key: Optional[Path]
 
 
-def add_credentials(url: str, token: str) -> Union[str, None]:
+def add_credentials(url: str, token: str) -> Optional[str]:
     """Adding credentials to the URL for git operations.
 
     For Bitbucket API tokens (starting with ATAT), uses the static username
@@ -48,6 +59,31 @@ def add_credentials(url: str, token: str) -> Union[str, None]:
     # URL-encode the token to handle special characters
     encoded_token = quote(token, safe="")
     return "https://" + username + ":" + encoded_token + "@" + repo
+
+
+def _get_repository_clone_url(
+    repo: Dict[str, Any], auth_mode: AuthMode, token: str
+) -> Optional[str]:
+    """Retrieve the clone URL (HTTPS or SSH, based on config) from a repository dictionary.
+
+    Args:
+        repo (dict): Repository information from Bitbucket API
+        auth_mode (AuthMode): Authentication mode (HTTPS or SSH)
+        token (str): API token for HTTPS authentication
+
+    Returns:
+        str | None: Clone URL or None if not found
+    """
+    repo_url = None
+
+    for clone in repo["links"]["clone"]:
+        if clone["name"] == auth_mode.value:
+            repo_url = clone["href"]
+            break
+
+    if auth_mode == AuthMode.HTTPS and repo_url is not None:
+        repo_url = add_credentials(repo_url, token)
+    return repo_url
 
 
 def _get_workspaces(
@@ -79,6 +115,7 @@ def _process_repo(
     skip_existing: bool,
     refresh: bool,
     target_folder: Path,
+    ssh_key: Optional[Path],
 ) -> None:
     """Process a single repository cloning or pulling changes.
 
@@ -114,8 +151,19 @@ def _process_repo(
 
     target_folder.parent.mkdir(parents=True, exist_ok=True)
     print(f"Cloning {repo_name} into {target_folder}.")
+
+    if ssh_key is None:
+        ssh_command = "ssh"
+    else:
+        ssh_key_path = ssh_key.resolve().as_posix()
+        ssh_command = f'ssh -i "{ssh_key_path}"'
+
     try:
-        git.Repo.clone_from(repo_url, target_folder)
+        git.Repo.clone_from(
+            url=repo_url,
+            to_path=target_folder,
+            env={"GIT_SSH_COMMAND": ssh_command},
+        )
     except git.GitCommandError as e:
         print(f"Error cloning {repo_name}: {e}\nSkipping.")
 
@@ -133,33 +181,28 @@ def _clone_bitbucket_workspace(
         config (BucketClonerConfig): configuration dataclass
     """
 
-    url = f"https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen=10"
+    url = f"https://api.bitbucket.org/2.0/repositories/{workspace}?pagelen={REQUEST_PAGELEN}"
     if project:
         url = url + f"&q=project.key%3D%22{project}%22"
 
     while (
-        resp := requests.get(url, auth=(config.email, config.token), timeout=10)
+        resp := requests.get(
+            url, auth=(config.email, config.token), timeout=REQUEST_TIMEOUT
+        )
     ).status_code == requests.codes.OK:
         jresp = resp.json()
 
         for repo in jresp["values"]:
             if repo["scm"] == "git":
-                # Checking if there is a https clone link
-                repo_url = None
-                for clone in repo["links"]["clone"]:
-                    if clone["name"] == "https":
-                        repo_url = clone["href"]
-                        break
+                # Checking if there is a https clone link matching our auth mode
+                repo_url = _get_repository_clone_url(
+                    repo, config.auth_mode, config.token
+                )
 
                 if repo_url is None:
                     print(
-                        f"Skipping {repo['name']} because there is no https clone link."
+                        f"Skipping {repo['name']} because there is no {config.auth_mode.value} clone link."
                     )
-                    continue
-
-                repo_url = add_credentials(repo_url, config.token)
-                if repo_url is None:
-                    print(f"Skipping {repo['name']} because of invalid URL.")
                     continue
 
                 repo_name = workspace + "/" + repo["name"]
@@ -175,6 +218,7 @@ def _clone_bitbucket_workspace(
                     config.skip_existing,
                     config.refresh,
                     target_folder,
+                    config.ssh_key,
                 )
 
             else:
@@ -309,6 +353,19 @@ def main(args: List[str]) -> None:
         type=Path,
         default=Path.cwd(),
     )
+    parser.add_argument(
+        "--auth-mode",
+        help="Authentication mode for cloning (https or ssh)",
+        type=AuthMode,
+        choices=list(AuthMode),
+        default=AuthMode.HTTPS,
+    )
+    parser.add_argument(
+        "--ssh-key",
+        help="Path to SSH key for SSH authentication, uses default SSH key if not provided",
+        type=Path,
+        default=None,
+    )
 
     namespace = parser.parse_args(args)
 
@@ -320,7 +377,22 @@ def main(args: List[str]) -> None:
             refresh=namespace.refresh,
             clone_into_project_folders=namespace.project_folder,
             base_folder=namespace.base_folder,
+            auth_mode=namespace.auth_mode,
+            ssh_key=namespace.ssh_key,
         )
+        print("Starting cloning process with configuration:")
+        print("Email:", config.email)
+        print("Skip existing:", config.skip_existing)
+        print("Refresh:", config.refresh)
+        print("Clone into project folders:", config.clone_into_project_folders)
+        print("Base folder:", config.base_folder)
+        print("Authentication mode:", config.auth_mode.value)
+        if config.auth_mode == AuthMode.SSH:
+            print(
+                "SSH key:",
+                config.ssh_key if config.ssh_key is not None else "default SSH key",
+            )
+
         clone_bitbucket(
             namespace.workspace,
             namespace.project,
@@ -333,11 +405,11 @@ def main(args: List[str]) -> None:
             print(f"{w['name']} ({w['slug']}) - {w['url']}")
 
     elif namespace.command == "project":
-        workspaces = _get_workspaces(
+        workspace_names = _get_workspaces(
             namespace.email, namespace.token, namespace.workspace
         )
 
-        for workspace in workspaces:
+        for workspace in workspace_names:
             projects = get_projects_in_workspace(
                 namespace.email, namespace.token, workspace
             )

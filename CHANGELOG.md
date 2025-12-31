@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pull existing repositories instead of deleting and cloning with `--refresh`/`-r` flag
 - Define the base folder for the clone with `--base-folder`
 - Create project folders under the workspace folder with `--project-folder` flag
+- Auth mode to select between `https` cloning using the API token and `ssh` using an ssh key
 - Pre-commit hooks
 - Changelog
 
