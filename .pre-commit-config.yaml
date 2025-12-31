@@ -45,3 +45,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
+
+      - id: type check
+        name: type check
+        entry: ty check --exclude 'test_*.py' .
+        language: system
+        pass_filenames: false

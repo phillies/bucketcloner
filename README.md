@@ -5,9 +5,21 @@ Simple tool to list all your bitbucket workspaces and clone (all) repositories a
 1. You need to know your Bitbucket account email. Can be found at https://bitbucket.org/account/settings/email/.
 2. You need to create an API token here https://id.atlassian.com/manage-profile/security/api-tokens with read permissions for *account*, *workspace membership* and *repositories*.
 
+
+| Command | Scopes |
+|---|---|
+| workspace | `read:user:bitbucket`, `read:workspace:bitbucket` |
+| clone | `read:user:bitbucket`, `read:workspace:bitbucket`, `read:repository:bitbucket` |
+| project | `read:user:bitbucket`, `read:workspace:bitbucket`, `read:project:bitbucket` |
+
+
 Install bucketcloner either by cloning this repository and running `pip install .` or by installing it via `pip install bucketcloner`. Minimum required python version is 3.9.
 
 Alternatively, you can run bucketcloner using `uvx`: `uvx bucketcloner --help`
+
+Authentication for cloning the repository can be done via `https` and the API token or using an SSH key. IMPORTANT: When using `ssh` make sure you have added the bitbucket server ssh fingerprint to the known hosts, otherwise the command will fail. Run `git clone git@bitbucket.org:...` once manually to make sure the key is added.
+
+You can pass your ssh key with `--ssh-key`, otherwise the users default ssh key will be used.
 
 ## List all workspaces
 ```bash
@@ -35,6 +47,11 @@ bucketcloner -e <email> -t <api_token> -w workspace1,workspace2 --skip-existing 
 Clone all repos from all workspaces with project PRO1 into /tmp with folder structure workspace/project/repo.
 ```bash
 bucketcloner -e <email> -t <api_token> --project PRO1 --base-folder /tmp --project-folder clone
+```
+
+Clone all repos using an ssh key
+```bash
+bucketcloner -e <email> -t <api_token> --base-folder /tmp  --auth-mode ssh --ssh-key "/my/id_rsa" clone
 ```
 
 List all projects in all workspaces

@@ -1,0 +1,59 @@
+# 88 is default, but I like to set it explicitly
+line-length = 88
+[lint]
+select = [
+  "C",
+  "E",     # pycodestyle
+  "F",     # pyflakes
+  "W",     # pycodestyle
+  "B",     # flake8 bugbear, common issues like mutable parameter
+  "UP",    # pyupgrade recommmmendations
+  "S",     # flake8-bandit / security
+  "ASYNC", # flake8 async
+  "A",     # flake8-builtins, shadowing builtin variables
+  "RUF",   # Ruff specific rules
+  "ANN",   # flake8 annotations
+  "FAST",  # FastAPI rules
+  "BLE",   # warn for too broad except blocks
+  "COM",   # flake8-commas, trailing comma handling
+  "C4",    # flake8-comprehensions, incorrect comprehension usage
+  "DTZ",   # flake8-datetimez, correct datetime usage
+  "EM",    # flake8-errmsg, correct strings in error logging
+  "FIX",   # flake8-fixme, warns about TODO and FIXME in code
+  "ICN",   #flake8-import-conventions, warns about bad imports
+  "LOG",   # flake8-logging, incorrect logger usage
+  "G",     # flake8-logging-format, correct logging message format
+  "PIE",
+  "PYI",
+  "PT",    # flake8-pytest-style, best practice in pytest
+  "Q",     # flake8-quote, correct quote usage
+  "RET",   # flake8-return, correct return usage
+  "SLF",   #flake8-self, warns when using private members
+  "SIM",   #flake8-simplify, shows simplifications
+  "TC",    # flake8-type-checking, type casting anc checking
+  "ARG",   # flake8-unused-arguments, checks for unused arguments
+  "PTH",   # flake8-use-pathlig, helps switching from os.path to pathlib
+  "I",     # isort, import sorting
+  "C90",   # Mccabe complexity
+  "PD",    # Pandas
+  "N",     # pep8-naming conventions
+  "PERF",  # perflint
+  "PLC",   # pylint convention violations
+  "PLE",   # pylint general errors in class and dunder usage
+  "PLR",   # pylint refactoring recommendations
+  "PLW",   # pylint warnings
+  "FURB",
+]
+ignore = [
+  "E203",    # whitespace before punctuation, sometimes this is better for readability
+  "E501",    # line too long
+  "COM812",  # avoid trailing comma warnings
+  "EM102",   # allow f-strings in error messages
+  "PLR0913", # allow long argument lists
+]
+fixable = ["UP"]
+extend-safe-fixes = ["UP006", "UP007", "UP035"]
+
+[lint.extend-per-file-ignores]
+# Allow assert, magic values, and imports in functions in test files
+"tests/**.py" = ["S101", "PLR2004", "PLC0415"]
