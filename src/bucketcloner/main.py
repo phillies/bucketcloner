@@ -381,7 +381,6 @@ def main(args: List[str]) -> None:
             ssh_key=namespace.ssh_key,
         )
         print("Starting cloning process with configuration:")
-        print("Email:", config.email)
         print("Skip existing:", config.skip_existing)
         print("Refresh:", config.refresh)
         print("Clone into project folders:", config.clone_into_project_folders)
