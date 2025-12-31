@@ -99,7 +99,10 @@ def _process_repo(
             print(f"Pulling changes for {repo_name}.")
             local_repo = git.Repo(target_folder)
             origin = local_repo.remotes.origin
-            origin.pull()
+            try:
+                origin.pull()
+            except git.GitCommandError as e:
+                print(f"Error pulling changes for {repo_name}: {e}\nSkipping.")
             return
 
         print(f"Deleting {repo_name} because it already exists.")
@@ -111,7 +114,10 @@ def _process_repo(
 
     target_folder.parent.mkdir(parents=True, exist_ok=True)
     print(f"Cloning {repo_name} into {target_folder}.")
-    git.Repo.clone_from(repo_url, target_folder)
+    try:
+        git.Repo.clone_from(repo_url, target_folder)
+    except git.GitCommandError as e:
+        print(f"Error cloning {repo_name}: {e}\nSkipping.")
 
 
 def _clone_bitbucket_workspace(
@@ -176,9 +182,9 @@ def _clone_bitbucket_workspace(
                     f"Skipping {repo['name']} because it is not a git but a {repo['scm']} repository."
                 )
 
-        if "next" not in resp.json():
+        if "next" not in jresp:
             break
-        url = resp.json()["next"]
+        url = jresp["next"]
     else:
         print(f"The url {url} returned status code {resp.status_code}.")
 
@@ -198,9 +204,6 @@ def clone_bitbucket(
     workspace_list = _get_workspaces(config.email, config.token, workspaces)
 
     for workspace in workspace_list:
-        if not Path(workspace).exists():
-            Path(workspace).mkdir()
-
         _clone_bitbucket_workspace(workspace, project, config)
 
 
@@ -296,7 +299,7 @@ def main(args: List[str]) -> None:
         action="store_true",
     )
     parser.add_argument(
-        "--project-folders",
+        "--project-folder",
         help="Clone repositories into project subfolders inside the workspace folder",
         action="store_true",
     )
@@ -315,7 +318,7 @@ def main(args: List[str]) -> None:
             token=namespace.token,
             skip_existing=namespace.skip_existing,
             refresh=namespace.refresh,
-            clone_into_project_folders=namespace.project_folders,
+            clone_into_project_folders=namespace.project_folder,
             base_folder=namespace.base_folder,
         )
         clone_bitbucket(
