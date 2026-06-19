@@ -31,6 +31,15 @@ class BucketClonerConfig:
     ssh_key: Optional[Path]
 
 
+@dataclass(frozen=True)
+class Workspace:
+    slug: str
+    url: str
+
+    def __str__(self) -> str:
+        return f"{self.slug} - {self.url}"
+
+
 def add_credentials(url: str, token: str) -> Optional[str]:
     """Adding credentials to the URL for git operations.
 
@@ -103,7 +112,7 @@ def _get_workspaces(
         List[str]: List of workspace slugs
     """
     if workspaces is None:
-        workspace_list = [w["slug"] for w in list_bitbucket_workspaces(email, token)]
+        workspace_list = [w.slug for w in list_bitbucket_workspaces(email, token)]
     else:
         workspace_list = workspaces.split(",")
     return workspace_list
@@ -283,7 +292,7 @@ def get_projects_in_workspace(email: str, token: str, workspace: str) -> List[di
     return projects
 
 
-def list_bitbucket_workspaces(email: str, token: str) -> List[Dict[str, str]]:
+def list_bitbucket_workspaces(email: str, token: str) -> List[Workspace]:
     """List all workspaces
 
     Args:
@@ -291,9 +300,9 @@ def list_bitbucket_workspaces(email: str, token: str) -> List[Dict[str, str]]:
         token (str): API token
 
     Returns:
-        list: List of workspaces (dict with name, slug, and url as entries)
+        list: List of workspaces
     """
-    url = "https://api.bitbucket.org/2.0/workspaces"
+    url = "https://api.bitbucket.org/2.0/user/workspaces"
 
     workspaces = []
 
@@ -303,12 +312,14 @@ def list_bitbucket_workspaces(email: str, token: str) -> List[Dict[str, str]]:
         jresp = resp.json()
 
         for workspace in jresp["values"]:
-            w = {
-                "name": workspace["name"],
-                "slug": workspace["slug"],
-                "url": workspace["links"]["html"]["href"],
-            }
-            workspaces.append(w)
+            if (slug := workspace.get("workspace", {}).get("slug")) is not None and (
+                url := workspace.get("workspace", {})
+                .get("links", {})
+                .get("self", {})
+                .get("href")
+            ) is not None:
+                w = Workspace(slug=slug, url=url)
+                workspaces.append(w)
 
         if "next" not in resp.json():
             break
@@ -401,7 +412,7 @@ def main(args: List[str]) -> None:
     elif namespace.command == "workspace":
         workspaces = list_bitbucket_workspaces(namespace.email, namespace.token)
         for w in workspaces:
-            print(f"{w['name']} ({w['slug']}) - {w['url']}")
+            print(w)
 
     elif namespace.command == "project":
         workspace_names = _get_workspaces(
