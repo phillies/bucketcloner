@@ -130,3 +130,6 @@ dmypy.json
 
 # Scratch space
 scratch/
+
+.ruff_cache/
+.vdev/
